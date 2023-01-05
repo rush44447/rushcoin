@@ -59,7 +59,7 @@ export class Wallet {
   }
 
   getSecretKeyByAddress(publicKey) {
-    const keyPair = this.keyPairs.find((keypair) => keypair.index == publicKey);
+    const keyPair = this.keyPairs.find((keypair) => keypair.publicKey == publicKey);
     return keyPair ? keyPair.secretKey : null;
   }
 

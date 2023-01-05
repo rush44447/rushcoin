@@ -8,7 +8,6 @@ import { MinerController } from './miner/miner.controller';
 import { NodeController } from './node/node.controller';
 import { HttpserverController } from './httpserver/httpserver.controller';
 import { BlockchainService } from './blockchain/blockchain.service';
-import { TransactionService } from './transaction/Transaction.service';
 import { WalletService } from './operator/wallet.service';
 
 @Module({
@@ -21,6 +20,6 @@ import { WalletService } from './operator/wallet.service';
     NodeController,
     HttpserverController,
   ],
-  providers: [AppService, BlockchainService, TransactionService, WalletService],
+  providers: [AppService, BlockchainService, WalletService],
 })
 export class AppModule {}

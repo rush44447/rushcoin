@@ -9,12 +9,28 @@ import { EventEmitter } from 'events';
 import { Block } from '../util/Block';
 import { BlockchainAssertionError } from './blockchainAssertionError';
 import { TransactionAssertionError } from '../transaction/TransactionAssertionError';
+import { Transaction } from '../util/Transaction';
+import * as lodash from 'lodash';
 
 @Injectable()
 export class BlockchainService {
   dbName: string;
   private emitter = new EventEmitter();
   blocks: Blocks;
+  transactions: Transactions;
+  blocksDB: DB;
+  transactionsDB: DB;
+
+  constructor() {
+    this.blocksDB = this.initializeBlockDB();
+    this.transactionsDB = this.initializeTransactionDB();
+    this.init();
+  }
+
+  async init() {
+    this.blocks = await this.blocksDB.read(Blocks);
+    this.transactions = await this.transactionsDB.read(Transactions);
+  }
 
   initializeBlockDB() {
     this.dbName = Connection.name;
@@ -36,15 +52,28 @@ export class BlockchainService {
       );
     }
     this.checkChain(newBlockChain);
-
-    newBlockChain.splice(newBlockChain.length - blocks.length).map((block) => {
-      blocks = this.addBlock(blocks, block);
+    newBlockChain.splice(blocks.length).map((block) => {
+      blocks = this.addBlock(block);
     });
     this.emitter.emit('blockchainReplaced', blocks);
     return blocks;
   }
 
-  addBlock(blocks, block) {}
+  getLastBlock() {
+    return this.blocks[this.blocks.length - 1];
+  }
+
+  addBlock(block, emit = 'true') {
+    if (this.checkBlock(block, this.getLastBlock())) {
+      this.blocks.push(block);
+      this.blocksDB.write(this.blocks);
+    }
+    console.info(`Block added: ${block.hash}`);
+    console.debug(`Block added: ${JSON.stringify(block)}`);
+    if (emit) this.emitter.emit('blockAdded', block);
+
+    return block;
+  }
 
   checkChain(blocks: Block[]) {
     if (JSON.stringify(blocks[0]) !== JSON.stringify(Block.genesis)) {
@@ -56,47 +85,80 @@ export class BlockchainService {
     return true;
   }
 
-  checkBlock(block2: Block, block1: Block, blocks: Block[]) {
-    const blockHash = Block.toHash(block2);
-    if (block1.index + 1 != block2.index) {
-      throw new BlockchainAssertionError('Index not proper');
+  checkBlock(newBlock: Block, oldblock: Block, blocks: Block[] = this.blocks) {
+    const blockHash = Block.toHash(newBlock);
+    if (oldblock.index + 1 != newBlock.index) {
+      throw new BlockchainAssertionError(
+        `Index not proper for ${oldblock.index} and ${newBlock.index}`,
+      );
     }
-    if (block2.previousHash != block1.hash) {
+    if (newBlock.previousHash != oldblock.hash) {
       throw new BlockchainAssertionError('Invalid Hash');
     }
-    if (block2.hash != blockHash) {
+
+    if (newBlock.hash != blockHash) {
       throw new BlockchainAssertionError('Hash not proper');
     }
+
     if (
-      Block.getDifficulty(block2.hash) / 10 >=
-      this.getDifficulty(this.blocks, block2.index)
+      Block.getDifficulty(newBlock.hash) / 10 >=
+      this.getDifficulty(newBlock.index)
     ) {
       throw new BlockchainAssertionError('Invalid proof-of-work');
     }
 
-    blocks.map((block) =>
-      this.checkTransactions(block['transactions'], blocks),
+    newBlock.transactions.map((transact: Transaction) =>
+      this.checkTransactions(Transaction.organizeJsonArray(transact), blocks),
     );
 
-    let sumofOutputTransactions;
-    block2.transactions.map((transaction) => {
-      let sum = 0;
-      transaction.data.outputs.map((output) => (sum += output));
-      sumofOutputTransactions += sum;
-    });
-    let sumofInputTransactions;
-    block2.transactions.map((transaction) => {
-      let sum = 0;
-      transaction.data.inputs.map((input) => (sum += input));
-      sumofInputTransactions += sum;
+    let sumofOutputTransactions = 0;
+    let sumofInputTransactions = 0;
+
+    newBlock.transactions.map((transaction) => {
+      transaction.data.outputs.map(
+        (output) => (sumofOutputTransactions += output.amount || 0),
+      );
+      transaction.data.inputs.map(
+        (input) => (sumofInputTransactions += input.amount || 0),
+      );
     });
     sumofInputTransactions += Config.MINING_REWARD;
+    const isInputsAmountGreaterOrEqualThanOutputsAmount =
+      sumofInputTransactions >= sumofOutputTransactions;
+    if (!isInputsAmountGreaterOrEqualThanOutputsAmount)
+      throw new BlockchainAssertionError('Invalid block balance');
+
+    const transactionsList = lodash
+      .flatten(
+        newBlock.transactions.map((trans) =>
+          trans.data.inputs.length > 0 ? trans.data.inputs : [],
+        ),
+      )
+      .map((dat) => `${dat.transaction} | ${dat.index}`);
+    const doublespendsList = lodash.forOwn(
+      lodash.countBy(transactionsList),
+      (value, key) => (value >= 2 ? key : null),
+    );
+    if (doublespendsList.length > 0)
+      throw new BlockAssertionError(
+        'There are unspent output transactions being used more than once',
+      );
+
+    const type = lodash.countBy(newBlock.transactions.map((x) => x.type));
+
+    if (type.fee && type.fee > 1)
+      throw new TransactionAssertionError(
+        "Invalid fee transaction count: expected '1'",
+      );
+    if (type.reward && type.reward > 1)
+      throw new TransactionAssertionError(
+        "Invalid reward transaction count: expected '1'",
+      );
     return true;
   }
 
-  checkTransactions(transactions, referenceBlocks) {
-    // 1
-
+  checkTransactions(transaction: Transaction, referenceBlocks = this.blocks) {
+    transaction.check();
     const IsNotAlreadyPresent = referenceBlocks.map((block) => {
       return (
         block.transactions.find(
@@ -107,16 +169,111 @@ export class BlockchainService {
 
     if (!IsNotAlreadyPresent) {
       throw new TransactionAssertionError(
-        `Transaction '${transactions.id}' is already in the blockchain`,
+        `Transaction '${transaction.id}' is already in the blockchain`,
       );
     }
+    let IsNotSpent = true;
+    const listoftransactions = [];
+
+    referenceBlocks.map((block) => {
+      block.transactions.map((transact) => {
+        if (transact.data.inputs.length > 0)
+          listoftransactions.push(...transact.data.inputs);
+      });
+    });
+
+    transaction.data.inputs.map((transaction) => {
+      IsNotSpent =
+        IsNotSpent &&
+        !listoftransactions.find(
+          (data) =>
+            data.transaction == transaction.transaction &&
+            data.index == transaction.index,
+        );
+    });
+
+    if (!IsNotSpent) {
+      //throw new TransactionAssertionError(`Input transaction spent`);
+    }
+    return true;
   }
 
-  getDifficulty(blocks, index) {
-    return Config.pow.getDifficulty(blocks, index);
+  getDifficulty(index) {
+    return Config.pow.getDifficulty(this.blocks, index);
   }
 
   setBlocks(blocks: Blocks) {
     this.blocks = blocks;
+  }
+
+  mapper(transactions: Transaction[], address: string, txinput, txoutput) {
+    transactions.map((transaction: Transaction) => {
+      let index = 0;
+      transaction.data.outputs.map((output: any) => {
+        if (address && output.address == address)
+          txoutput.push({
+            index,
+            address: output.address,
+            amount: output.amount,
+            transaction: transaction.id,
+          });
+        index++;
+      });
+
+      transaction.data.inputs.map((input: any) => {
+        if (address && input.address != address) return;
+        txinput.push({
+          index: input.index,
+          address: input.address,
+          amount: input.amount,
+          transaction: input.transaction,
+        });
+      });
+    });
+  }
+  getUnspentTransactionsForAddress(address) {
+    const txinput = [];
+    const txoutput = [];
+
+    this.blocks.map((block) =>
+      this.mapper(block.transactions, address, txinput, txoutput),
+    );
+    this.mapper(this.transactions, address, txinput, txoutput);
+
+    const unspentTransaction = [];
+    txoutput.map((output) => {
+      if (
+        !txinput.find(
+          (input) =>
+            input.index == output.index &&
+            input.transaction == output.transaction,
+        )
+      )
+        unspentTransaction.push(output);
+    });
+    return unspentTransaction;
+  }
+
+  addTransaction(transaction: Transaction, emit = true) {
+    if (this.checkTransactions(transaction)) {
+      this.transactions.push(transaction);
+      this.writeTransactions();
+      console.info(`Transaction added: ${transaction.id}`);
+
+      if (emit) this.emitter.emit('transactionAdded', transaction);
+
+      return transaction;
+    }
+  }
+
+  async writeTransactions() {
+    await this.transactionsDB.write(this.transactions);
+  }
+
+  getAllBlocks() {
+    return this.blocks;
+  }
+  getAllTransactions() {
+    return this.transactions;
   }
 }

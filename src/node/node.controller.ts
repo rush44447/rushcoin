@@ -3,6 +3,6 @@ import { Controller } from '@nestjs/common';
 @Controller('node')
 export class NodeController {
   constructor() {
-    console.log(3)
+
   }
 }
