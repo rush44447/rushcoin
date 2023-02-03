@@ -1,21 +1,20 @@
-import { Injectable } from '@nestjs/common';
-import { Connection } from '../connection';
+import { Body, Injectable } from "@nestjs/common";
+import { Connection } from '../util/connection';
 import { DB } from '../util/DB';
 import Transactions from '../transaction/Transactions';
 import { Config } from '../config';
 import Blocks from './Blocks';
 import { BlockAssertionError } from './blockAssertionError';
-import { EventEmitter } from 'events';
 import { Block } from '../util/Block';
 import { BlockchainAssertionError } from './blockchainAssertionError';
 import { TransactionAssertionError } from '../transaction/TransactionAssertionError';
 import { Transaction } from '../util/Transaction';
 import * as lodash from 'lodash';
+import { EmitterService } from "../services/emitter.service";
 
 @Injectable()
 export class BlockchainService {
   dbName: string;
-  private emitter = new EventEmitter();
   blocks: Blocks;
   transactions: Transactions;
   blocksDB: DB;
@@ -33,45 +32,44 @@ export class BlockchainService {
   }
 
   initializeBlockDB() {
-    this.dbName = Connection.name;
-    return new DB('./src/data/' + this.dbName + '/blocks.json', new Blocks());
+    this.dbName = Connection().name;
+    return new DB(`./src/data/${this.dbName}/blocks.json`, new Blocks());
   }
 
   initializeTransactionDB() {
-    this.dbName = Connection.name;
-    return new DB(
-      './src/data/' + this.dbName + '/transactions.json',
+    this.dbName = Connection().name;
+    return new DB(`./src/data/${this.dbName}/transactions.json`,
       new Transactions(),
     );
   }
 
-  replaceChain(newBlockChain, blocks) {
+  replaceChain(newBlockChain, blocks = this.blocks) {
     if (newBlockChain.length <= blocks.length) {
       throw new BlockAssertionError(
         'Blockchain shorter than the current blockchain',
       );
     }
     this.checkChain(newBlockChain);
-    newBlockChain.splice(blocks.length).map((block) => {
-      blocks = this.addBlock(block);
-    });
-    this.emitter.emit('blockchainReplaced', blocks);
+    newBlockChain.splice(blocks.length).map((block) => this.addBlock(block, false));
+    EmitterService.getEmitter().emit('blockchainReplaced', blocks);
     return blocks;
   }
 
-  getLastBlock() {
+  getLastBlock(): Block {
     return this.blocks[this.blocks.length - 1];
   }
+  getTransactionById(data) {
+    return this.transactions.find((transaction) => transaction.id == data.id);
+  }
 
-  addBlock(block, emit = 'true') {
+  addBlock(block, emit = true) {
     if (this.checkBlock(block, this.getLastBlock())) {
       this.blocks.push(block);
       this.blocksDB.write(this.blocks);
     }
     console.info(`Block added: ${block.hash}`);
     console.debug(`Block added: ${JSON.stringify(block)}`);
-    if (emit) this.emitter.emit('blockAdded', block);
-
+    if (emit) EmitterService.getEmitter().emit('blockAdded', block);
     return block;
   }
 
@@ -99,9 +97,8 @@ export class BlockchainService {
     if (newBlock.hash != blockHash) {
       throw new BlockchainAssertionError('Hash not proper');
     }
-
     if (
-      Block.getDifficulty(newBlock.hash) / 10 >=
+      Block.getDifficulty(newBlock.hash) >=
       this.getDifficulty(newBlock.index)
     ) {
       throw new BlockchainAssertionError('Invalid proof-of-work');
@@ -260,7 +257,7 @@ export class BlockchainService {
       this.writeTransactions();
       console.info(`Transaction added: ${transaction.id}`);
 
-      if (emit) this.emitter.emit('transactionAdded', transaction);
+      if (emit) EmitterService.getEmitter().emit('transactionAdded', transaction);
 
       return transaction;
     }
@@ -272,8 +269,5 @@ export class BlockchainService {
 
   getAllBlocks() {
     return this.blocks;
-  }
-  getAllTransactions() {
-    return this.transactions;
   }
 }

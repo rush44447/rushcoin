@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { Connection } from '../connection';
 import { DB } from '../util/DB';
 import Wallets from './Wallets';
 import { Wallet } from '../util/Wallet';
@@ -10,7 +9,7 @@ export class WalletService {
   dbName: string;
 
   initializeWalletDB() {
-    this.dbName = Connection.name;
+    this.dbName = process.env.NAME;
     return new DB('./src/data/' + this.dbName + '/wallets.json', new Wallets());
   }
 

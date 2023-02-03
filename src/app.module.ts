@@ -9,9 +9,20 @@ import { NodeController } from './node/node.controller';
 import { HttpserverController } from './httpserver/httpserver.controller';
 import { BlockchainService } from './blockchain/blockchain.service';
 import { WalletService } from './operator/wallet.service';
+import { HttpModule } from '@nestjs/axios';
+import { Connection } from "./util/connection";
+enum nodeEnvironment {
+  STAGE = 'staging',
+  DEV = 'development',
+  TEST = 'test',
+}
 
 @Module({
-  imports: [ConfigModule.forRoot()],
+  imports: [ConfigModule.forRoot({
+    envFilePath: `${process.cwd()}/.env.${nodeEnvironment.TEST}`,
+    // envFilePath: `${process.cwd()}/.env.${nodeEnvironment.DEV}`,
+    load: [Connection]
+  }), HttpModule],
   controllers: [
     AppController,
     BlockchainController,

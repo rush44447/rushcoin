@@ -1,7 +1,7 @@
-import Wallets from '../operator/Wallets';
 import CryptoEdDSAUtil from './CryptoEdDSAUtil';
 import CryptoUtil from './CryptoUtil';
 import { KeyPair } from './KeyPair';
+import KeyPairs from "../operator/KeyPairs";
 
 export class Wallet {
   id: string;
@@ -78,8 +78,8 @@ export class Wallet {
     const data = new Wallet();
     const keys = Object.keys(wallet);
     keys.forEach((key) => {
-      if (key == 'wallets' && wallet[key]) {
-        data[key] = Wallets.fromJsonArray(wallet[key]);
+      if (key == 'keyPairs' && wallet[key]) {
+        data[key] = KeyPairs.fromJsonArray(wallet[key]);
       } else {
         data[key] = wallet[key];
       }

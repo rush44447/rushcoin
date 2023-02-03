@@ -1,4 +1,4 @@
-import { Controller } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { WalletService } from './wallet.service';
 import { DB } from '../util/DB';
 import { Wallet } from '../util/Wallet';
@@ -8,6 +8,7 @@ import { BlockchainService } from '../blockchain/blockchain.service';
 import { TransactionBuilder } from './TransactionBuilder';
 import { Config } from '../config';
 import { Transaction } from '../util/Transaction';
+import CryptoUtil from '../util/CryptoUtil';
 
 @Controller('operator')
 export class OperatorController {
@@ -26,49 +27,54 @@ export class OperatorController {
     this.wallets = await this.walletDB.read(Wallets);
   }
 
+  @Get('wallets')
   getWallets() {
     return this.wallets;
   }
 
-  getWalletById(id) {
+  @Get('wallets/:walletId([a-zA-Z0-9]{64})')
+  getWalletById(@Param('walletId') id) {
     return this.wallets.find((wallet: Wallet) => wallet.id == id);
   }
 
-  private addWallet(wallet: Wallet) {
+  private async addWallet(wallet: Wallet) {
     this.wallets.push(wallet);
-    if (this.wallets.length != 0) return this.walletDB.write(this.wallets);
-    return [];
+    await this.walletDB.write(this.wallets);
+    return this.wallets.length != 0 ? await this.walletDB.read(Wallets) : [];
   }
 
-  createWalletFromPassword(password: string) {
-    const wallet = this.walletService.fromPassword(password);
-    return this.addWallet(wallet);
+  @Post('wallets')
+  createWalletFromPassword(@Body() data) {
+    const wallet = this.walletService.fromPassword(data.password);
+    return this.addWallet(Wallet.organizeJsonArray(wallet));
   }
 
-  checkWalletPassword(walletId, passwordHash) {
+  checkWalletPassword(walletId, req) {
     const wall = this.wallets.find((wallet: Wallet) => wallet.id == walletId);
     if (!wall) throw new Argumenterror('Wallet Not Found');
-    return wall.passwordHash == passwordHash;
+    return wall.passwordHash == CryptoUtil.hash(req.headers.password);
   }
 
-  getAddressesForWallet(walletId) {
+  @Get('wallets/:walletId/addresses')
+  getAddressesForWallet(@Param('walletId') walletId) {
     const wallet = this.getWalletById(walletId);
     if (!wallet) throw new Argumenterror('Wallet Not Found');
+    return wallet.getAddresses();
+  }
+
+  @Post('wallets/:walletId/addresses')
+  generateAddressForWallet(@Param('walletId') walletId, @Req() req) {
+    const wallet = this.getWalletById(walletId);
+    if (!wallet) throw new Argumenterror('Wallet Not Found');
+    if (!this.checkWalletPassword(walletId, req))
+      throw new Argumenterror('Invalid Wallet Password');
     const address = wallet.generateAddress();
     this.walletDB.write(this.wallets);
     return address;
   }
 
-  generateAddressForWallet(walletId) {
-    const wallet = this.getWalletById(walletId);
-    if (!wallet) throw new Argumenterror('Wallet Not Found');
-    wallet.generateAddress();
-    const address = wallet.generateAddress();
-    this.walletDB.write(this.wallets);
-    return address;
-  }
-
-  getBalanceForAddress(addressid) {
+  @Get('/:addressId/balance')
+  getBalanceForAddress(@Param('addressId') addressid) {
     const utxo =
       this.blockchainService.getUnspentTransactionsForAddress(addressid);
 
@@ -79,15 +85,15 @@ export class OperatorController {
     return sum;
   }
 
-  createTrasaction(){
+  @Post('wallets/:walletId/transactions')
+  makeaTransaction(@Body() data, @Param('walletId') walletId: string) {
     const newtransaction = this.createTransaction(
-      'f5afef6a57dc54ed4c9ba8c0d49a903fee97c1f7bef8f4afe16c061da6bd0c53',
-      '56c3455f6d9654d478f9bce4867da9b8e4cd57a57d2e4a3da8a711bd448a27a6',
-      'a1d5e72a806b77a39715ad6cd2c84c40198ae249090dd4e96d6c511ec2b5241c',
-      10000,
-      '56c3455f6d9654d478f9bce4867da9b8e4cd57a57d2e4a3da8a711bd448a27a6',
+      walletId,
+      data.fromAddress,
+      data.toAddress,
+      data.amount,
+      data.changeId || data.fromAddress,
     );
-
     newtransaction.check();
 
     this.blockchainService.addTransaction(
@@ -104,6 +110,7 @@ export class OperatorController {
   ): Transaction {
      const utxo =
       this.blockchainService.getUnspentTransactionsForAddress(fromAddressId);
+
     const wallet = this.getWalletById(walletId);
     if (!wallet) throw new Argumenterror('Wallet Not Found');
 

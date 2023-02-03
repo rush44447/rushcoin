@@ -1,11 +1,16 @@
-import { Controller } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Req } from '@nestjs/common';
 import Blocks from './Blocks';
 import { BlockchainService } from './blockchain.service';
 import Transactions from '../transaction/Transactions';
-import { EventEmitter } from 'events';
 import { Block } from '../util/Block';
+import { ApiTags } from '@nestjs/swagger';
+import { EmitterService } from '../services/emitter.service';
+import { NodeController } from '../node/node.controller';
+import { HttpService } from '@nestjs/axios';
+import { BlockchainAssertionError } from './blockchainAssertionError';
 
 @Controller('blockchain')
+@ApiTags('blockchain')
 export class BlockchainController {
   blocksDB: any;
   transactionsDB: any;
@@ -17,7 +22,6 @@ export class BlockchainController {
     this.blocksDB = this.blockchainService.initializeBlockDB();
     this.transactionsDB = this.blockchainService.initializeTransactionDB();
     this.init();
-    this.emitter = new EventEmitter();
   }
 
   async init() {
@@ -25,10 +29,13 @@ export class BlockchainController {
     this.transactions = await this.transactionsDB.read(Transactions);
     if (this.blocks.length == 0) {
       this.blocks.push(Block.genesis);
-      await this.blocksDB.write(this.blocks);
+      try{
+        await this.blocksDB.write(this.blocks);
+      } catch (e){console.log(e)}
     }
     this.blocks.map((block) => this.removeTransactionsFromTransaction(block));
-    this.blockchainService.setBlocks(this.blocks);
+    this.blockchainService.blocks = this.blocks;
+    this.emitter = EmitterService.getEmitter();
   }
 
   replaceChain(newBlockChain) {
@@ -39,25 +46,53 @@ export class BlockchainController {
     this.blockchainService.checkChain(this.blocks);
   }
 
+  @Get()
   getAllBlocks() {
     return this.blocks;
   }
 
-  getBlockByIndex(index) {
-    return this.blocks[index];
+  @Get('blocks')
+  getAllBlocksinchain() {
+    return this.blocks;
   }
 
-  getBlockByHash(hash) {
+  @Get('blocks/:hash([a-zA-Z0-9]{64})')
+  getBlockByHash(@Param('hash') hash) {
     return this.blocks.find((block) => block.hash == hash);
   }
 
+  @Get('blocks/latest')
+  getLastBlock() {
+    return this.blocks[this.blocks.length - 1];
+  }
+
+  @Put('blocks/latest')
+  updateLastBlock(@Body() body) {
+    if(body.timestamp2)body.timestamp = body.timestamp2;
+    const block = Block.organizeJsonArray(body);
+    const result = new NodeController(
+      this.blockchainService,
+      new HttpService(),
+    ).checkReceivedBlock(block);
+    if (!result) throw new BlockchainAssertionError('Blockchain is update.');
+    return block;
+  }
+
+  @Get('blocks/:index')
+  getBlockByIndex(@Param('index') index) {
+    return this.blocks.find((block) => block.index == Number(index));
+  }
+
+  @Get('transactions')
   getAllTransactions() {
     return this.transactions;
   }
 
-  getUnspentTransactionsForAddress(address) {
+  @Get('transactions/unspent')
+  getUnspentTransactionsForAddress(address, @Req() req) {
     const txinput = [];
     const txoutput = [];
+    if (!address) address = req.query.address;
     this.blockchainService.blocks.map((block) => {
       block.transactions.map((transaction) => {
         let index = 0;
@@ -71,6 +106,7 @@ export class BlockchainController {
             });
           index++;
         });
+        //console.log("txoutput",txoutput)
 
         transaction.data.inputs.map((input) => {
           if (address && input.address != address) return;
@@ -81,6 +117,7 @@ export class BlockchainController {
             transaction: input.transaction,
           });
         });
+        // console.log("txinput",txinput)
       });
     });
 
@@ -102,11 +139,13 @@ export class BlockchainController {
     return this.blockchainService.getDifficulty(index);
   }
 
-  getTransactionById(id) {
-    return this.transactions.find((transaction) => transaction.id == id);
+  @Post('transactions')
+  getTransactionById(@Body() data) {
+    return this.transactions.find((transaction) => transaction.id == data.id);
   }
 
-  getTransactionFromBlocks(transactionId) {
+  @Get('blocks/transactions/:id([a-zA-Z0-9]{64})')
+  getTransactionFromBlocks(@Param('id') transactionId) {
     return this.blocks
       .map((block) =>
         block.transactions.find(
@@ -129,9 +168,5 @@ export class BlockchainController {
         ),
     );
     this.transactionsDB.write(this.transactions);
-  }
-
-  getLastBlock() {
-    return this.blocks[this.blocks.length - 1];
   }
 }
