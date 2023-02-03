@@ -8,6 +8,8 @@ import { EmitterService } from '../services/emitter.service';
 import { NodeController } from '../node/node.controller';
 import { HttpService } from '@nestjs/axios';
 import { BlockchainAssertionError } from './blockchainAssertionError';
+import { Transaction } from "../util/Transaction";
+import { TransactionAssertionError } from "../transaction/TransactionAssertionError";
 
 @Controller('blockchain')
 @ApiTags('blockchain')
@@ -84,7 +86,7 @@ export class BlockchainController {
   }
 
   @Get('transactions')
-  getAllTransactions() {
+  getAllTransactions() {console.log("getting transcations")
     return this.transactions;
   }
 
@@ -141,10 +143,15 @@ export class BlockchainController {
 
   @Post('transactions')
   getTransactionById(@Body() data) {
-    return this.transactions.find((transaction) => transaction.id == data.id);
+    const transactionReq = Transaction.organizeJsonArray(data)
+    const transactionFound = this.transactions.find((transaction) => transaction.id == data.id);
+    if (transactionFound != null) throw new TransactionAssertionError(`Transaction '${data.id}' already exists`);
+    this.blockchainService.addTransaction(
+      Transaction.organizeJsonArray(transactionReq),false
+    );
   }
 
-  @Get('blocks/transactions/:id([a-zA-Z0-9]{64})')
+  @Get('transactions/:id([a-zA-Z0-9]{64})')
   getTransactionFromBlocks(@Param('id') transactionId) {
     return this.blocks
       .map((block) =>

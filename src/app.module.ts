@@ -19,8 +19,8 @@ enum nodeEnvironment {
 
 @Module({
   imports: [ConfigModule.forRoot({
-    envFilePath: `${process.cwd()}/.env.${nodeEnvironment.TEST}`,
-    // envFilePath: `${process.cwd()}/.env.${nodeEnvironment.DEV}`,
+    // envFilePath: `${process.cwd()}/.env.${nodeEnvironment.TEST}`,
+    envFilePath: `${process.cwd()}/.env.${nodeEnvironment.DEV}`,
     load: [Connection]
   }), HttpModule],
   controllers: [

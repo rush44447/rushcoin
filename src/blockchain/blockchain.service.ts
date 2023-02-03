@@ -1,4 +1,4 @@
-import { Body, Injectable } from "@nestjs/common";
+import { Body, Injectable, Param } from "@nestjs/common";
 import { Connection } from '../util/connection';
 import { DB } from '../util/DB';
 import Transactions from '../transaction/Transactions';
@@ -50,7 +50,8 @@ export class BlockchainService {
       );
     }
     this.checkChain(newBlockChain);
-    newBlockChain.splice(blocks.length).map((block) => this.addBlock(block, false));
+    newBlockChain.slice(newBlockChain.length - blocks.length).map((block) => this.addBlock(block, false));
+    console.log("checkeddd",newBlockChain)
     EmitterService.getEmitter().emit('blockchainReplaced', blocks);
     return blocks;
   }
@@ -58,8 +59,19 @@ export class BlockchainService {
   getLastBlock(): Block {
     return this.blocks[this.blocks.length - 1];
   }
+
   getTransactionById(data) {
     return this.transactions.find((transaction) => transaction.id == data.id);
+  }
+
+  getTransactionFromBlocks(transactionId) {
+    return this.blocks
+      .map((block) =>
+        block.transactions.find(
+          (transaction) => transaction.id == transactionId,
+        ),
+      )
+      .filter((item) => item);
   }
 
   addBlock(block, emit = true) {
@@ -90,6 +102,8 @@ export class BlockchainService {
         `Index not proper for ${oldblock.index} and ${newBlock.index}`,
       );
     }
+    console.log("newBlock",newBlock)
+    console.log("oldblock",oldblock)
     if (newBlock.previousHash != oldblock.hash) {
       throw new BlockchainAssertionError('Invalid Hash');
     }
