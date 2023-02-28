@@ -12,6 +12,7 @@ import { WalletService } from './operator/wallet.service';
 import { HttpModule } from '@nestjs/axios';
 import { Connection } from "./util/connection";
 enum nodeEnvironment {
+  PROD = 'production',
   STAGE = 'staging',
   DEV = 'development',
   TEST = 'test',
@@ -19,8 +20,8 @@ enum nodeEnvironment {
 
 @Module({
   imports: [ConfigModule.forRoot({
-    // envFilePath: `${process.cwd()}/.env.${nodeEnvironment.TEST}`,
-    envFilePath: `${process.cwd()}/.env.${nodeEnvironment.DEV}`,
+    envFilePath: `${process.cwd()}/.env.${nodeEnvironment.TEST}`,
+    // envFilePath: `${process.cwd()}/.env.${nodeEnvironment.DEV}`,
     load: [Connection]
   }), HttpModule],
   controllers: [
