@@ -33,8 +33,6 @@
     "@types/fs-extra": "^9.0.13",
     "elliptic": "^6.5.4",
     "lodash": "^4.17.21",
-    "lodash.forown": "^4.4.0",
-    "npm-watch": "^0.11.0",
     "reflect-metadata": "^0.1.13",
     "rimraf": "^3.0.2",
     "rxjs": "^7.2.0",

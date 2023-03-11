@@ -14,7 +14,6 @@ import { EmitterService } from "../services/emitter.service";
 
 @Injectable()
 export class BlockchainService {
-  dbName: string;
   blocks: Blocks;
   transactions: Transactions;
   blocksDB: DB;
@@ -32,13 +31,11 @@ export class BlockchainService {
   }
 
   initializeBlockDB() {
-    this.dbName = Connection().name;
-    return new DB(`./src/data/${this.dbName}/blocks.json`, new Blocks());
+    return new DB(`./src/data/${Connection().name}/blocks.json`, new Blocks());
   }
 
   initializeTransactionDB() {
-    this.dbName = Connection().name;
-    return new DB(`./src/data/${this.dbName}/transactions.json`,
+    return new DB(`./src/data/${Connection().name}/transactions.json`,
       new Transactions(),
     );
   }
@@ -51,7 +48,6 @@ export class BlockchainService {
     }
     this.checkChain(newBlockChain);
     newBlockChain.slice(newBlockChain.length - blocks.length).map((block) => this.addBlock(block, false));
-    console.log("checkeddd",newBlockChain)
     EmitterService.getEmitter().emit('blockchainReplaced', blocks);
     return blocks;
   }
@@ -102,8 +98,6 @@ export class BlockchainService {
         `Index not proper for ${oldblock.index} and ${newBlock.index}`,
       );
     }
-    console.log("newBlock",newBlock)
-    console.log("oldblock",oldblock)
     if (newBlock.previousHash != oldblock.hash) {
       throw new BlockchainAssertionError('Invalid Hash');
     }

@@ -15,7 +15,6 @@ export class MinerController {
   @Post('mine')
   mine(@Body() data) {
     const block = this.generateNextBlock(data.rewardAddress, data.feeAddress);
-    console.log("block>>>",block)
     process.execArgv = lodash.reject(process.execArgv, (data) =>
       data.includes('debug'),
     );
@@ -40,7 +39,6 @@ export class MinerController {
         this.blockchainservice.getLastBlock().hash,
       ),
     };
-    console.log("input>>>",input)
 
     const generatedBlock = this.proveWorkFor(
       Block.organizeJsonArray(input.jsonBlock),
@@ -98,7 +96,6 @@ export class MinerController {
           );
         },
       );
-      console.log('selectedTransactions', selectedTransactions.length);
 
       if (transactionInputFoundAnywhere) {
         if (transaction.type === 'regular' && negativeOutputsFound === 0) {

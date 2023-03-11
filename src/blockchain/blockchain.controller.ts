@@ -10,12 +10,13 @@ import { HttpService } from '@nestjs/axios';
 import { BlockchainAssertionError } from './blockchainAssertionError';
 import { Transaction } from "../util/Transaction";
 import { TransactionAssertionError } from "../transaction/TransactionAssertionError";
+import { DB } from "../util/DB";
 
 @Controller('blockchain')
 @ApiTags('blockchain')
 export class BlockchainController {
-  blocksDB: any;
-  transactionsDB: any;
+  blocksDB: DB;
+  transactionsDB: DB;
   blocks: Blocks;
   transactions: Transactions;
   emitter: any;
@@ -38,14 +39,6 @@ export class BlockchainController {
     this.blocks.map((block) => this.removeTransactionsFromTransaction(block));
     this.blockchainService.blocks = this.blocks;
     this.emitter = EmitterService.getEmitter();
-  }
-
-  replaceChain(newBlockChain) {
-    return this.blockchainService.replaceChain(newBlockChain, this.blocks);
-  }
-
-  checkChain() {
-    this.blockchainService.checkChain(this.blocks);
   }
 
   @Get()
@@ -86,7 +79,7 @@ export class BlockchainController {
   }
 
   @Get('transactions')
-  getAllTransactions() {console.log("getting transcations")
+  getAllTransactions() {
     return this.transactions;
   }
 
@@ -135,10 +128,6 @@ export class BlockchainController {
         unspentTransaction.push(output);
     });
     return unspentTransaction;
-  }
-
-  getDifficulty(index) {
-    return this.blockchainService.getDifficulty(index);
   }
 
   @Post('transactions')

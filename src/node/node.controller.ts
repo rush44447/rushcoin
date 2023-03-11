@@ -246,7 +246,6 @@ export class NodeController {
     // Get from all peers if the transaction has been confirmed
     const foundLocally =
       this.blockchainService.getTransactionFromBlocks(transactionId) != null;
-    console.log(foundLocally)
     return Promise.all(
       this.peers.map((peer) => this.getConfirmation(peer, transactionId)),
     ).then((values) => {

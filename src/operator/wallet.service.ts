@@ -3,14 +3,12 @@ import { DB } from '../util/DB';
 import Wallets from './Wallets';
 import { Wallet } from '../util/Wallet';
 import CryptoUtil from '../util/CryptoUtil';
+import { Connection } from "../util/connection";
 
 @Injectable()
 export class WalletService {
-  dbName: string;
-
-  initializeWalletDB() {
-    this.dbName = process.env.NAME;
-    return new DB('./src/data/' + this.dbName + '/wallets.json', new Wallets());
+   initializeWalletDB() {
+    return new DB('./src/data/' + Connection().name + '/wallets.json', new Wallets());
   }
 
   fromPassword(password: string) {
@@ -19,6 +17,4 @@ export class WalletService {
     wallet.id = CryptoUtil.randomId();
     return wallet;
   }
-
-  generateKeyPairFromSecret() {}
 }

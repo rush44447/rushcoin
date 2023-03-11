@@ -14,6 +14,5 @@ async function bootstrap() {
   // @ts-ignore
   SwaggerModule.setup('api-docs', app, swaggerdoc, options);
   await app.listen(process.env.PORT);
-  const config = app.get(ConfigService);
 }
 bootstrap();
